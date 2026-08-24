@@ -5,7 +5,8 @@ import {
   Download, Paperclip, ArrowUp, RefreshCw,
   FileText, Bell, ChevronDown, Sparkles, X,
   BarChart3, BookOpen, LifeBuoy, CheckCircle2,
-  FileUp, Search, Layers, Activity, Database
+  FileUp, Search, Layers, Activity, Database,
+  Trash2
 } from 'lucide-react';
 import {
   ResponsiveContainer, AreaChart, Area, BarChart, Bar,
@@ -41,6 +42,16 @@ function App() {
       console.error("Failed to fetch history:", err);
     } finally {
       setTimeout(() => setRefreshing(false), 300);
+    }
+  };
+
+  const handleClearHistory = async () => {
+    if (!window.confirm("Are you sure you want to clear all chat and analysis history?")) return;
+    try {
+      await axios.delete(`${API_BASE_URL}/history`);
+      await fetchHistory();
+    } catch (err) {
+      alert(`Failed to clear history: ${err.message}`);
     }
   };
 
@@ -557,13 +568,23 @@ function App() {
                       </button>
                     ))}
                   </div>
-                  <button
-                    onClick={downloadCSV}
-                    className="text-zinc-400 hover:text-white p-1.5 rounded-full hover:bg-zinc-800 transition-colors"
-                    title="Download Full CSV Log"
-                  >
-                    <FileText className="w-4 h-4" />
-                  </button>
+                  <div className="flex items-center space-x-1">
+                    <button
+                      onClick={downloadCSV}
+                      className="text-zinc-400 hover:text-white p-1.5 rounded-full hover:bg-zinc-800 transition-colors"
+                      title="Download Full CSV Log"
+                    >
+                      <FileText className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={handleClearHistory}
+                      disabled={history.length === 0}
+                      className="text-zinc-400 hover:text-rose-400 p-1.5 rounded-full hover:bg-rose-500/10 transition-colors disabled:opacity-30 disabled:hover:text-zinc-400"
+                      title="Clear Chat & History"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
 
                 {/* Tab 1: Today (Conversational Feed) */}
@@ -580,6 +601,31 @@ function App() {
                           <div className="text-[10px] text-zinc-500 mt-1 font-mono">11:32 AM</div>
                         </div>
                       </div>
+
+                      {/* Quick Sample Prompts when empty */}
+                      {history.length === 0 && (
+                        <div className="space-y-2 pt-2 animate-in fade-in duration-300">
+                          <div className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider px-1">
+                            Try an Example:
+                          </div>
+                          <div className="space-y-1.5">
+                            {[
+                              "The new dashboard redesign is extraordinarily sleek, responsive, and intuitive!",
+                              "Customer service has been completely unresponsive and our server has been down for hours.",
+                              "Mitochondria are membrane-bound organelles that generate chemical energy for cellular processes."
+                            ].map((sample, sIdx) => (
+                              <button
+                                key={sIdx}
+                                type="button"
+                                onClick={() => setInputText(sample)}
+                                className="w-full text-left text-[11px] text-zinc-400 hover:text-white bg-[#121316] hover:bg-[#212329] border border-white/5 hover:border-[#f4adc6]/30 p-2.5 rounded-xl transition-all"
+                              >
+                                💡 "{sample}"
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     {/* Feed History Items */}

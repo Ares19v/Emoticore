@@ -227,6 +227,16 @@ def export_history_csv(
     )
 
 
+@app.delete("/history", tags=["History"])
+@app.post("/history/clear", tags=["History"])
+def clear_all_history(db: Session = Depends(get_db)):
+    """Clear all insight records from the database."""
+    deleted_count = db.query(models.InsightRecord).delete()
+    db.commit()
+    logger.info("Cleared history | deleted_records=%s", deleted_count)
+    return {"status": "Success", "deleted_count": deleted_count}
+
+
 @app.get("/history/{user_id}", response_model=List[schemas.InsightResponse], tags=["History"])
 def get_history(
     user_id: int,
