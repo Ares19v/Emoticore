@@ -33,6 +33,14 @@ function App() {
     fetchHistory();
   }, []);
 
+  useEffect(() => {
+    if (activeTab === 'Today') {
+      setTimeout(() => {
+        chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }, 100);
+    }
+  }, [history, activeTab]);
+
   const fetchHistory = async () => {
     setRefreshing(true);
     try {
@@ -628,9 +636,9 @@ function App() {
                       )}
                     </div>
 
-                    {/* Feed History Items */}
-                    {history.map((item) => (
-                      <div key={item.id} className="space-y-3">
+                    {/* Feed History Items (Chronological: Top to Bottom) */}
+                    {[...history].reverse().map((item) => (
+                      <div key={item.id} className="space-y-3 animate-in fade-in duration-200">
                         {/* User query bubble */}
                         <div className="flex justify-end">
                           <div className="bg-[#2a2c35] text-zinc-100 p-3.5 rounded-2xl rounded-tr-sm text-xs max-w-[88%] shadow-sm">
@@ -684,6 +692,19 @@ function App() {
                         </div>
                       </div>
                     ))}
+
+                    {/* Live Processing Indicator */}
+                    {loading && (
+                      <div className="flex items-start gap-2.5 animate-pulse">
+                        <div className="w-7 h-7 rounded-full bg-[#f4adc6] flex items-center justify-center text-[10px] font-bold text-black shrink-0">
+                          EC
+                        </div>
+                        <div className="bg-[#212329] border border-white/5 p-3.5 rounded-2xl rounded-tl-sm text-xs text-zinc-400 flex items-center gap-2">
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#f4adc6]" />
+                          <span>Analyzing linguistic sentiment &amp; generating AI takeaways...</span>
+                        </div>
+                      </div>
+                    )}
 
                     <div ref={chatEndRef} />
                   </div>
