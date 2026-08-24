@@ -56,8 +56,7 @@ def run_internal_audit():
         # but the processor should still function.
         res = client.post(
             "/analyze", 
-            data={"original_text": "The Emoticore engine is working beautifully! This is a successful test."},
-            headers={"Authorization": f"Bearer {token}"}
+            data={"original_text": "The Emoticore engine is working beautifully! This is a successful test."}
         )
         assert res.status_code == 200
         print("      [OK] Processor logic and sentiment mapping verified.")

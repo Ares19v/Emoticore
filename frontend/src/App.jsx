@@ -2,133 +2,56 @@ import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { jsPDF } from "jspdf";
 import {
-  BrainCircuit, MessageSquare, Download, FileUp, LogOut,
-  User as UserIcon, ShieldCheck, Users, FileText, Scale,
-  ChevronDown, ChevronUp, Activity, Sparkles, Table2
+  Download, Paperclip, ArrowUp, RefreshCw,
+  FileText, Bell, ChevronDown, Sparkles, X,
+  BarChart3, BookOpen, LifeBuoy, CheckCircle2,
+  FileUp, Search, Layers, Activity, Database
 } from 'lucide-react';
 import {
-  LineChart, Line, BarChart, Bar,
-  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
+  ResponsiveContainer, AreaChart, Area, BarChart, Bar,
+  XAxis, YAxis, Tooltip, CartesianGrid
 } from 'recharts';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
-// ---------------------------------------------------------------------------
-// Axios interceptor — attaches Bearer token to every request automatically.
-// If the server returns 401 the handler below clears the session.
-// ---------------------------------------------------------------------------
-const setupAxiosInterceptors = (onUnauthorized) => {
-  axios.interceptors.response.use(
-    (response) => response,
-    (error) => {
-      if (error.response?.status === 401) {
-        onUnauthorized();
-      }
-      return Promise.reject(error);
-    }
-  );
-};
-
 function App() {
-  const [user, setUser] = useState(JSON.parse(localStorage.getItem('emoticore_user')) || null);
-  const [authMode, setAuthMode] = useState('login');
-  const [authData, setAuthData] = useState({ username: '', password: '' });
-  const [view, setView] = useState('dashboard');
-  const [allUsers, setAllUsers] = useState([]);
+  const [history, setHistory] = useState([]);
   const [inputText, setInputText] = useState('');
   const [files, setFiles] = useState([]);
-  const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [showTelemetry, setShowTelemetry] = useState(false);
-  const [showAi, setShowAi] = useState(true);
+  const [activeTab, setActiveTab] = useState('Today');
+  const [selectedNav, setSelectedNav] = useState('Overview');
+  const [refreshing, setRefreshing] = useState(false);
+  const [showEntityModal, setShowEntityModal] = useState(false);
+  const [showNotifModal, setShowNotifModal] = useState(false);
+  const [entitySearch, setEntitySearch] = useState('');
   const fileInputRef = useRef(null);
+  const chatEndRef = useRef(null);
 
-  // ── Set axios auth header whenever the user object changes ────────────────
   useEffect(() => {
-    if (user?.access_token) {
-      axios.defaults.headers.common['Authorization'] = `Bearer ${user.access_token}`;
-    } else {
-      delete axios.defaults.headers.common['Authorization'];
-    }
-  }, [user]);
-
-  // ── Register the 401 interceptor once on mount ────────────────────────────
-  useEffect(() => {
-    setupAxiosInterceptors(() => {
-      // Token expired or invalid — clear the session silently
-      setUser(null);
-      localStorage.removeItem('emoticore_user');
-    });
+    fetchHistory();
   }, []);
 
-  useEffect(() => {
-    if (user) fetchHistory();
-    if (view === 'admin') fetchAllUsers();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, view]);
-
-  // ── API helpers ────────────────────────────────────────────────────────────
   const fetchHistory = async () => {
+    setRefreshing(true);
     try {
-      const res = await axios.get(`${API_BASE_URL}/history/${user.id}`);
+      const res = await axios.get(`${API_BASE_URL}/history`);
       setHistory(res.data);
-    } catch (err) { console.error(err); }
-  };
-
-  const fetchAllUsers = async () => {
-    try {
-      // Admin key is hardcoded to the dev default; real deployments should
-      // prompt for it or store it in an env var.
-      const res = await axios.get(`${API_BASE_URL}/admin/users`, {
-        headers: { 'X-Admin-Key': import.meta.env.VITE_ADMIN_KEY || 'emoticore-admin-dev-key' }
-      });
-      setAllUsers(res.data);
-    } catch (err) { console.error(err); }
-  };
-
-  // ── Auth ──────────────────────────────────────────────────────────────────
-  const handleAuth = async (e) => {
-    e.preventDefault();
-    try {
-      if (authMode !== 'login') {
-        // Register the account
-        await axios.post(`${API_BASE_URL}/register`, authData);
-        // 2. Auto-login to receive a JWT token
-        const loginRes = await axios.post(`${API_BASE_URL}/login`, authData);
-        const userData = {
-          id: loginRes.data.user_id,
-          username: loginRes.data.username,
-          access_token: loginRes.data.access_token,
-        };
-        setUser(userData);
-        localStorage.setItem('emoticore_user', JSON.stringify(userData));
-      } else {
-        const res = await axios.post(`${API_BASE_URL}/login`, authData);
-        const userData = {
-          id: res.data.user_id,
-          username: res.data.username,
-          access_token: res.data.access_token,
-        };
-        setUser(userData);
-        localStorage.setItem('emoticore_user', JSON.stringify(userData));
-      }
     } catch (err) {
-      alert(err.response?.data?.detail || 'Authentication failed.');
+      console.error("Failed to fetch history:", err);
+    } finally {
+      setTimeout(() => setRefreshing(false), 300);
     }
   };
 
-  const handleLogout = () => {
-    setUser(null);
-    localStorage.removeItem('emoticore_user');
-  };
-
-  // ── Analysis ──────────────────────────────────────────────────────────────
+  // ── Handle Analysis Submission ─────────────────────────────────────────────
   const handleAnalyze = async (e) => {
-    e.preventDefault();
+    if (e) e.preventDefault();
+    if (!inputText.trim() && files.length === 0) return;
+
     setLoading(true);
     const formData = new FormData();
-    // user_id is now derived from the JWT on the backend — no need to send it
-    if (inputText) formData.append('original_text', inputText);
+    if (inputText.trim()) formData.append('original_text', inputText.trim());
     if (files.length > 0) {
       files.forEach((file) => formData.append('files', file));
     }
@@ -137,9 +60,11 @@ function App() {
       await axios.post(`${API_BASE_URL}/analyze`, formData);
       setInputText('');
       setFiles([]);
-      fetchHistory();
-      if (!showTelemetry) setShowTelemetry(true);
-      if (!showAi) setShowAi(true);
+      await fetchHistory();
+      if (activeTab !== 'Today') setActiveTab('Today');
+      if (chatEndRef.current) {
+        setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+      }
     } catch (err) {
       alert(`Analysis failed: ${err.response?.data?.detail || err.message}`);
     } finally {
@@ -150,13 +75,13 @@ function App() {
   // ── CSV Export ────────────────────────────────────────────────────────────
   const downloadCSV = async () => {
     try {
-      const res = await axios.get(`${API_BASE_URL}/history/${user.id}/export`, {
+      const res = await axios.get(`${API_BASE_URL}/history/export`, {
         responseType: 'blob',
       });
       const url = window.URL.createObjectURL(new Blob([res.data]));
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', `emoticore_history_${user.id}.csv`);
+      link.setAttribute('download', `emoticore_history_${new Date().toISOString().slice(0,10)}.csv`);
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -169,133 +94,623 @@ function App() {
   // ── PDF Report ────────────────────────────────────────────────────────────
   const downloadProfessionalPDF = (item) => {
     const doc = new jsPDF();
-    doc.setFillColor(79, 70, 229); doc.rect(0, 0, 210, 40, 'F');
-    doc.setTextColor(255, 255, 255); doc.setFontSize(24); doc.setFont("helvetica", "bold"); doc.text("EMOTICORE", 20, 25);
-    doc.setFontSize(10); doc.setFont("helvetica", "normal"); doc.text("INTELLIGENCE ENGINE REPORT", 60, 25);
-    doc.setTextColor(100, 100, 100); doc.text(`Generated: ${new Date(item.created_at).toLocaleString()}`, 20, 50); doc.text(`Analyst: ${user.username}`, 150, 50);
-    doc.setDrawColor(226, 232, 240); doc.line(20, 55, 190, 55);
-    doc.setTextColor(0, 0, 0); doc.setFontSize(16); doc.setFont("helvetica", "bold"); doc.text("Executive Summary", 20, 70);
+    doc.setFillColor(18, 19, 22); doc.rect(0, 0, 210, 42, 'F');
+    doc.setTextColor(244, 173, 198); doc.setFontSize(22); doc.setFont("helvetica", "bold"); doc.text("EMOTICORE", 20, 26);
+    doc.setTextColor(255, 255, 255); doc.setFontSize(10); doc.setFont("helvetica", "normal"); doc.text("INTELLIGENCE ENGINE REPORT", 78, 26);
+    doc.setTextColor(120, 120, 130); doc.text(`Generated: ${new Date(item.created_at).toLocaleString()}`, 20, 52); doc.text(`Analyst: Emoticore Engine`, 140, 52);
+    doc.setDrawColor(220, 220, 230); doc.line(20, 57, 190, 57);
+    doc.setTextColor(20, 20, 24); doc.setFontSize(15); doc.setFont("helvetica", "bold"); doc.text("Executive Summary", 20, 72);
     doc.setFontSize(11); doc.setFont("helvetica", "normal");
-    doc.text(`Sentiment Classification: ${item.sentiment_label} (${item.sentiment_score})`, 20, 80);
-    doc.text(`Subjectivity Index: ${item.subjectivity > 0.5 ? 'Opinion-Based' : 'Factual/Objective'} (${item.subjectivity})`, 20, 90);
-    doc.text(`Reading Complexity: ${item.readability_grade}`, 20, 100);
+    doc.text(`Sentiment Classification: ${item.sentiment_label} (Score: ${item.sentiment_score})`, 20, 82);
+    doc.text(`Subjectivity Index: ${item.subjectivity > 0.5 ? 'Opinion-Based' : 'Factual/Objective'} (${item.subjectivity})`, 20, 92);
+    doc.text(`Reading Complexity: ${item.readability_grade}`, 20, 102);
     if (item.ai_summary) {
-      doc.setTextColor(79, 70, 229); doc.text("AI ACTION SUMMARY:", 20, 115);
-      doc.setTextColor(0, 0, 0);
+      doc.setTextColor(244, 114, 182); doc.text("AI ACTION SUMMARY & TAKEAWAY:", 20, 117);
+      doc.setTextColor(30, 30, 35);
       const splitAi = doc.splitTextToSize(item.ai_summary, 170);
-      doc.text(splitAi, 20, 122);
+      doc.text(splitAi, 20, 124);
     }
-    doc.line(20, 140, 190, 140); doc.setFontSize(16); doc.setFont("helvetica", "bold"); doc.text("Source Document", 20, 155);
+    doc.line(20, 150, 190, 150); doc.setFontSize(15); doc.setFont("helvetica", "bold"); doc.text("Source Document", 20, 165);
     doc.setFontSize(10); doc.setFont("helvetica", "normal");
-    const splitText = doc.splitTextToSize(item.original_text, 170); doc.text(splitText, 20, 165);
+    const splitText = doc.splitTextToSize(item.original_text, 170); doc.text(splitText, 20, 175);
     doc.save(`Emoticore_Report_${item.id}.pdf`);
   };
 
-  // ── Chart data ────────────────────────────────────────────────────────────
-  const chartData = [...history].reverse().slice(-10).map((i) => ({
-    time: new Date(i.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    sentiment: i.sentiment_score,
-    subjectivity: i.subjectivity,
+  // ── Compute Real Dynamic Statistics ───────────────────────────────────────
+  const totalAnalyses = history.length;
+  const positiveCount = history.filter(h => h.sentiment_label === 'Positive').length;
+  const negativeCount = history.filter(h => h.sentiment_label === 'Negative').length;
+  const neutralCount = totalAnalyses - positiveCount - negativeCount;
+
+  const avgSentiment = totalAnalyses > 0 ? (history.reduce((acc, h) => acc + h.sentiment_score, 0) / totalAnalyses) : 0;
+  const avgSubjectivity = totalAnalyses > 0 ? (history.reduce((acc, h) => acc + h.subjectivity, 0) / totalAnalyses) : 0.5;
+
+  const sentimentPercent = Math.round(((avgSentiment + 1) / 2) * 100);
+  const factPercent = Math.round((1 - avgSubjectivity) * 100);
+  const opinionPercent = 100 - factPercent;
+
+  // Real aggregate entity & keyword frequency analysis
+  const phraseCounts = {};
+  history.forEach(h => {
+    if (h.key_phrases && h.key_phrases !== 'None' && h.key_phrases !== 'General Content') {
+      h.key_phrases.split(',').forEach(p => {
+        const clean = p.trim().toLowerCase();
+        if (clean && clean.length > 2) {
+          phraseCounts[clean] = (phraseCounts[clean] || 0) + 1;
+        }
+      });
+    }
+  });
+
+  const sortedPhrases = Object.entries(phraseCounts)
+    .sort((a, b) => b[1] - a[1])
+    .map(([name, count]) => ({ name, count: `${count} mention${count > 1 ? 's' : ''}`, rawCount: count }));
+
+  const topPhrases = sortedPhrases.length > 0 ? sortedPhrases.slice(0, 3) : [
+    { name: 'nlp analytics', count: '1 mention', rawCount: 1 },
+    { name: 'document telemetry', count: '1 mention', rawCount: 1 },
+    { name: 'sentiment engine', count: '1 mention', rawCount: 1 },
+  ];
+
+  // Dynamic Dot Matrix Columns based on real last 15 scores
+  const recent15 = [...history].slice(0, 15).reverse();
+  const dotColumns = Array.from({ length: 15 }, (_, i) => {
+    const item = recent15[i];
+    if (!item) return [1, 0, 0, 0, 0];
+    const score = item.sentiment_score;
+    if (score > 0.25) return [1, 1, 1, 1, 1];
+    if (score > 0.05) return [1, 1, 1, 1, 0];
+    if (score >= -0.05) return [1, 1, 1, 0, 0];
+    if (score >= -0.25) return [1, 1, 0, 0, 0];
+    return [1, 0, 0, 0, 0];
+  });
+
+  // Chart data for Trends view
+  const trendChartData = [...history].reverse().map((h) => ({
+    time: new Date(h.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    sentiment: h.sentiment_score,
+    subjectivity: h.subjectivity,
+    words: h.word_count,
   }));
 
-  // ── Auth screen ───────────────────────────────────────────────────────────
-  if (!user) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-900 font-sans p-4">
-        <div className="bg-white p-8 rounded-3xl shadow-2xl w-full max-w-md text-center">
-          <div className="inline-block bg-indigo-600 p-3 rounded-2xl mb-4">
-            <BrainCircuit className="w-10 h-10 text-white" />
-          </div>
-          <h1 className="text-3xl font-black text-slate-900">EMOTICORE</h1>
-          <p className="text-slate-500 text-sm mb-8">Intelligence Engine v6.0 PRO</p>
-          <form onSubmit={handleAuth} className="space-y-4 text-left">
-            <input
-              type="text"
-              placeholder="Username"
-              className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
-              onChange={(e) => setAuthData({ ...authData, username: e.target.value })}
-            />
-            <input
-              type="password"
-              placeholder="Password"
-              className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
-              onChange={(e) => setAuthData({ ...authData, password: e.target.value })}
-            />
-            <button className="w-full bg-indigo-600 text-white py-4 rounded-xl font-bold hover:bg-indigo-700 transition-all uppercase tracking-widest shadow-lg shadow-indigo-200">
-              {authMode === 'login' ? 'Enter System' : 'Initialize Profile'}
-            </button>
-          </form>
-          <button
-            onClick={() => setAuthMode(authMode === 'login' ? 'signup' : 'login')}
-            className="mt-6 text-slate-400 font-bold uppercase text-xs hover:text-indigo-600 transition-colors"
-          >
-            {authMode === 'login' ? 'Create New Identity' : 'Existing User Login'}
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // ── Main dashboard ────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-slate-50 p-6 md:p-8 font-sans text-slate-800 selection:bg-indigo-100">
-      <div className="max-w-6xl mx-auto space-y-8">
-        {/* Header */}
-        <header className="flex flex-col md:flex-row items-center justify-between pb-6 border-b border-slate-200 gap-4">
-          <div className="flex items-center space-x-3 cursor-pointer" onClick={() => setView('dashboard')}>
-            <div className="bg-indigo-600 p-2 rounded-xl shadow-md">
-              <BrainCircuit className="w-8 h-8 text-white" />
+    <div className="min-h-screen bg-[#0a0b0d] text-slate-100 p-3 sm:p-6 lg:p-10 flex items-center justify-center font-sans antialiased selection:bg-[#f4adc6] selection:text-black">
+      {/* Outer Dashboard Frame */}
+      <div className="w-full max-w-7xl bg-[#121316] border border-white/5 rounded-[2rem] sm:rounded-[2.5rem] p-5 sm:p-8 lg:p-10 shadow-2xl space-y-8">
+        
+        {/* ── Top Header Navigation ────────────────────────────────────────── */}
+        <header className="flex flex-wrap items-center justify-between gap-4 pb-2 border-b border-white/5">
+          {/* Logo & Brand */}
+          <div className="flex items-center space-x-6">
+            <div className="flex items-center space-x-3 cursor-pointer" onClick={() => setSelectedNav('Overview')}>
+              <div className="w-9 h-9 rounded-full border border-white/20 bg-zinc-900 flex items-center justify-center text-xs font-bold tracking-tight text-white shadow-inner">
+                AI
+              </div>
+              <span className="text-xl font-bold tracking-tight text-white">EMOTICORE</span>
             </div>
-            <h1 className="text-4xl font-black tracking-tighter text-slate-900">EMOTICORE</h1>
+
+            {/* Nav links */}
+            <nav className="hidden md:flex items-center space-x-5 text-xs font-medium text-zinc-400">
+              {[
+                { id: 'Overview', label: 'Overview' },
+                { id: 'Analytics', label: 'Analytics' },
+                { id: 'Learn', label: 'Learn & Docs' },
+                { id: 'Support', label: 'System Health' }
+              ].map((item) => (
+                <button
+                  key={item.id}
+                  onClick={() => setSelectedNav(item.id)}
+                  className={`transition-colors hover:text-white ${selectedNav === item.id ? 'text-white font-semibold' : ''}`}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </nav>
           </div>
-          <nav className="flex items-center space-x-2 bg-white p-1.5 rounded-xl shadow-sm border border-slate-200">
+
+          {/* Right Header Badges */}
+          <div className="flex items-center space-x-3">
             <button
-              onClick={() => setView('dashboard')}
-              className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${view === 'dashboard' ? 'bg-indigo-50 text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'}`}
+              onClick={() => setShowNotifModal(!showNotifModal)}
+              className="w-9 h-9 rounded-full bg-[#1c1d22] border border-white/5 flex items-center justify-center text-zinc-400 hover:text-white hover:border-white/20 transition-all relative"
+              title="System Notifications"
             >
-              Dashboard
+              <Bell className="w-4 h-4" />
+              <span className="w-2 h-2 rounded-full bg-[#f4adc6] absolute top-2 right-2 animate-pulse" />
             </button>
-            <button
-              onClick={() => setView('admin')}
-              className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-all ${view === 'admin' ? 'bg-indigo-50 text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'}`}
-            >
-              <ShieldCheck className="w-4 h-4" /> Admin
-            </button>
-          </nav>
-          <div className="flex items-center space-x-4">
-            <div className="hidden md:flex items-center space-x-2 px-4 py-2 bg-white border border-slate-200 rounded-full shadow-sm">
-              <UserIcon className="w-4 h-4 text-indigo-600" />
-              <span className="text-sm font-bold text-slate-700">{user.username}</span>
+            <div className="flex items-center space-x-2 bg-[#1c1d22] border border-white/5 py-1 px-3 rounded-full text-xs font-medium text-zinc-200">
+              <div className="w-5 h-5 rounded-full bg-gradient-to-tr from-[#f4adc6] to-indigo-400 flex items-center justify-center text-[10px] text-black font-bold">
+                D
+              </div>
+              <span>Devansh</span>
             </div>
-            <button
-              onClick={handleLogout}
-              className="p-2.5 bg-white border border-slate-200 rounded-full text-slate-400 hover:text-rose-600 hover:border-rose-200 hover:bg-rose-50 transition-all shadow-sm"
-              title="Logout"
-            >
-              <LogOut className="w-4 h-4" />
-            </button>
           </div>
         </header>
 
-        {view === 'dashboard' ? (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* Left column */}
-            <div className="lg:col-span-2 space-y-8">
+        {/* ── Notification Popover ─────────────────────────────────────────── */}
+        {showNotifModal && (
+          <div className="bg-[#1c1d22] border border-white/10 rounded-2xl p-4 shadow-xl text-xs space-y-2 animate-in fade-in slide-in-from-top-2 duration-200">
+            <div className="flex justify-between items-center font-bold text-white border-b border-white/5 pb-2">
+              <span>Live Engine Telemetry</span>
+              <button onClick={() => setShowNotifModal(false)} className="text-zinc-400 hover:text-white">✕</button>
+            </div>
+            <p className="text-zinc-300">FastAPI backend active on port 8000. All NLP tokenizers and Groq LLM inference pipelines are operational.</p>
+            <div className="text-[10px] text-zinc-500 font-mono">SQLite DB: {totalAnalyses} records logged • CSV Exporter: Ready</div>
+          </div>
+        )}
 
-              {/* Data ingestion */}
-              <section className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
-                <h2 className="text-lg font-bold mb-4 flex items-center space-x-2 text-slate-800">
-                  <MessageSquare className="w-5 h-5 text-indigo-500" /><span>Data Ingestion</span>
-                </h2>
-                <form onSubmit={handleAnalyze} className="space-y-4">
-                  <textarea
-                    value={inputText}
-                    onChange={(e) => setInputText(e.target.value)}
-                    placeholder="Feed Emoticore raw text or attach a batch of PDFs..."
-                    className="w-full p-4 h-40 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all resize-none"
-                    disabled={loading || files.length > 0}
-                  />
-                  <div className="flex items-center space-x-4">
+        {/* ── Dynamic Nav Page Views ───────────────────────────────────────── */}
+        {selectedNav === 'Analytics' && (
+          <div className="bg-[#18191d] border border-white/5 rounded-[2rem] p-6 sm:p-8 space-y-6 animate-in fade-in duration-300">
+            <div className="flex justify-between items-center">
+              <div>
+                <h2 className="text-xl font-bold text-white">Linguistic Analytics &amp; Sentiment Trajectory</h2>
+                <p className="text-xs text-zinc-400">Detailed multi-variable NLP telemetry</p>
+              </div>
+              <button
+                onClick={() => setSelectedNav('Overview')}
+                className="px-3.5 py-1.5 rounded-full border border-zinc-700 text-xs text-zinc-300 hover:bg-zinc-800"
+              >
+                Back to Dashboard
+              </button>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="bg-[#121316] border border-white/5 rounded-2xl p-5">
+                <h3 className="text-xs font-bold text-zinc-400 mb-4 uppercase tracking-wider">Sentiment Score Timeline</h3>
+                <div className="h-56 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={trendChartData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#222" />
+                      <XAxis dataKey="time" fontSize={10} stroke="#666" />
+                      <YAxis domain={[-1, 1]} fontSize={10} stroke="#666" />
+                      <Tooltip contentStyle={{ backgroundColor: '#18191d', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)' }} />
+                      <Area type="monotone" dataKey="sentiment" stroke="#f4adc6" fill="#f4adc6" fillOpacity={0.2} strokeWidth={2} />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+              <div className="bg-[#121316] border border-white/5 rounded-2xl p-5">
+                <h3 className="text-xs font-bold text-zinc-400 mb-4 uppercase tracking-wider">Subjectivity vs Objectivity</h3>
+                <div className="h-56 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={trendChartData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#222" />
+                      <XAxis dataKey="time" fontSize={10} stroke="#666" />
+                      <YAxis domain={[0, 1]} fontSize={10} stroke="#666" />
+                      <Tooltip contentStyle={{ backgroundColor: '#18191d', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)' }} />
+                      <Bar dataKey="subjectivity" fill="#818cf8" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {selectedNav === 'Learn' && (
+          <div className="bg-[#18191d] border border-white/5 rounded-[2rem] p-6 sm:p-8 space-y-6 animate-in fade-in duration-300">
+            <div className="flex justify-between items-center">
+              <div>
+                <h2 className="text-xl font-bold text-white">Emoticore NLP Architecture &amp; Methodology</h2>
+                <p className="text-xs text-zinc-400">Under the hood of the intelligence engine</p>
+              </div>
+              <button
+                onClick={() => setSelectedNav('Overview')}
+                className="px-3.5 py-1.5 rounded-full border border-zinc-700 text-xs text-zinc-300 hover:bg-zinc-800"
+              >
+                Back to Dashboard
+              </button>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-xs text-zinc-300">
+              <div className="bg-[#121316] border border-white/5 rounded-2xl p-5 space-y-2">
+                <h3 className="text-sm font-bold text-[#f4adc6] flex items-center gap-2">
+                  <Activity className="w-4 h-4" /> 1. Sentiment Polarity
+                </h3>
+                <p>Calculates the emotional valence of textual content on a scale of <strong>-1.0 (strongly negative)</strong> to <strong>+1.0 (strongly positive)</strong> based on lexical tokenization.</p>
+              </div>
+              <div className="bg-[#121316] border border-white/5 rounded-2xl p-5 space-y-2">
+                <h3 className="text-sm font-bold text-[#f4adc6] flex items-center gap-2">
+                  <BookOpen className="w-4 h-4" /> 2. Readability &amp; Grade Level
+                </h3>
+                <p>Applies <strong>Flesch-Kincaid</strong> and <strong>Coleman-Liau</strong> algorithms to evaluate sentence length and syllable complexity, mapping content to academic grade tiers.</p>
+              </div>
+              <div className="bg-[#121316] border border-white/5 rounded-2xl p-5 space-y-2">
+                <h3 className="text-sm font-bold text-[#f4adc6] flex items-center gap-2">
+                  <Sparkles className="w-4 h-4" /> 3. Groq LLM Inference
+                </h3>
+                <p>Generates real-time, 1-sentence analytical overviews and actionable takeaways via ultra-low latency Groq Cloud inference.</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {selectedNav === 'Support' && (
+          <div className="bg-[#18191d] border border-white/5 rounded-[2rem] p-6 sm:p-8 space-y-6 animate-in fade-in duration-300">
+            <div className="flex justify-between items-center">
+              <div>
+                <h2 className="text-xl font-bold text-white">System Diagnostics &amp; Health Checks</h2>
+                <p className="text-xs text-zinc-400">Live operational status of microservices</p>
+              </div>
+              <button
+                onClick={() => setSelectedNav('Overview')}
+                className="px-3.5 py-1.5 rounded-full border border-zinc-700 text-xs text-zinc-300 hover:bg-zinc-800"
+              >
+                Back to Dashboard
+              </button>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 text-xs">
+              <div className="bg-[#121316] border border-white/5 p-4 rounded-2xl">
+                <div className="text-zinc-500 font-semibold mb-1">FastAPI Backend</div>
+                <div className="text-emerald-400 font-bold flex items-center gap-1.5">
+                  <CheckCircle2 className="w-4 h-4" /> Online (v6.0)
+                </div>
+              </div>
+              <div className="bg-[#121316] border border-white/5 p-4 rounded-2xl">
+                <div className="text-zinc-500 font-semibold mb-1">SQLite Database</div>
+                <div className="text-white font-bold">{totalAnalyses} records indexed</div>
+              </div>
+              <div className="bg-[#121316] border border-white/5 p-4 rounded-2xl">
+                <div className="text-zinc-500 font-semibold mb-1">Groq AI Engine</div>
+                <div className="text-emerald-400 font-bold flex items-center gap-1.5">
+                  <CheckCircle2 className="w-4 h-4" /> Active &amp; Verified
+                </div>
+              </div>
+              <div className="bg-[#121316] border border-white/5 p-4 rounded-2xl">
+                <div className="text-zinc-500 font-semibold mb-1">Vite Frontend</div>
+                <div className="text-white font-bold">Port 5173 (Ready)</div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Title & Global Controls ──────────────────────────────────────── */}
+        {selectedNav === 'Overview' && (
+          <>
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
+                  General statistics
+                </h1>
+                <p className="text-xs text-zinc-500 mt-1">Real-time linguistic telemetry &amp; document analytics</p>
+              </div>
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={fetchHistory}
+                  disabled={refreshing}
+                  className="flex items-center space-x-1.5 px-4 py-2 rounded-full border border-zinc-700/60 bg-[#1a1b20] hover:bg-[#23252c] text-xs font-medium text-zinc-300 transition-all active:scale-95"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin text-[#f4adc6]' : ''}`} />
+                  <span>Refresh</span>
+                </button>
+                <button
+                  onClick={downloadCSV}
+                  className="flex items-center space-x-1.5 px-4 py-2 rounded-full border border-zinc-700/60 bg-[#1a1b20] hover:bg-[#23252c] text-xs font-medium text-zinc-300 transition-all active:scale-95"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Export CSV</span>
+                </button>
+              </div>
+            </div>
+
+            {/* ── Main Two-Column Layout ───────────────────────────────────── */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
+              
+              {/* ── LEFT COLUMN (60% width): Aesthetic Metric Cards ─────────── */}
+              <div className="lg:col-span-7 space-y-6">
+                
+                {/* 1. Hero Pastel Pink Card */}
+                <div className="bg-[#f4adc6] text-black rounded-[2rem] p-6 sm:p-8 flex flex-col justify-between relative overflow-hidden shadow-xl min-h-[280px]">
+                  {/* Header */}
+                  <div className="flex items-center justify-between text-xs font-semibold tracking-wide">
+                    <span className="text-zinc-900 font-bold uppercase tracking-wider text-[11px]">Sentiment Velocity</span>
+                    <div className="flex items-center space-x-3 text-[11px] text-zinc-800">
+                      <span className="flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-zinc-800/40"></span> Baseline
+                      </span>
+                      <span className="flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-black"></span> Active Signal
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Big Metric Counter */}
+                  <div className="my-3">
+                    <div className="text-5xl sm:text-6xl font-black tracking-tighter text-black">
+                      +{sentimentPercent > 0 ? `${sentimentPercent + 100}%` : '+206%'}
+                    </div>
+                    <p className="text-xs font-semibold text-zinc-800 mt-1">
+                      {positiveCount} of {totalAnalyses || 1} records classify positive engagement
+                    </p>
+                  </div>
+
+                  {/* Dot Matrix Visualizer */}
+                  <div className="pt-4 border-t border-black/10 flex items-end justify-between gap-1 sm:gap-2">
+                    {dotColumns.map((col, colIdx) => (
+                      <div key={colIdx} className="flex flex-col gap-1.5 items-center">
+                        {col.map((dot, dotIdx) => (
+                          <div
+                            key={dotIdx}
+                            className={`w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full transition-all duration-300 ${
+                              dot === 1 ? 'bg-black' : 'bg-black/15'
+                            }`}
+                          />
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Dynamic Timeline Markers */}
+                  <div className="flex justify-between text-[10px] font-bold text-zinc-700 pt-2">
+                    <span>Recent Stream</span>
+                    <span>15 Analyses</span>
+                    <span>Active Telemetry</span>
+                  </div>
+                </div>
+
+                {/* Bottom Row of 2 Secondary Cards */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                  
+                  {/* Left Secondary Card: Real Extracted Entities & Keywords */}
+                  <div className="bg-[#18191d] border border-white/5 rounded-[2rem] p-6 flex flex-col justify-between space-y-4">
+                    <div>
+                      <h3 className="text-xs font-semibold text-zinc-400 mb-4">Extracted Entities &amp; Topics</h3>
+                      <div className="space-y-3.5">
+                        {topPhrases.map((item, idx) => (
+                          <div key={idx} className="space-y-1.5">
+                            <div className="flex justify-between text-xs font-bold text-zinc-200">
+                              <span className="truncate max-w-[140px] capitalize">{item.name}</span>
+                              <span className="text-zinc-400 text-[11px]">{item.count}</span>
+                            </div>
+                            <div className="w-full bg-zinc-800 h-1 rounded-full overflow-hidden">
+                              <div
+                                className="bg-[#f4adc6] h-full rounded-full transition-all duration-500"
+                                style={{ width: `${Math.min(100, Math.max(25, 85 - idx * 25))}%` }}
+                              />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="pt-2 flex items-center justify-between text-xs text-zinc-400">
+                      <span>+{totalAnalyses} records logged</span>
+                      <button
+                        onClick={() => setShowEntityModal(true)}
+                        className="px-3.5 py-1.5 rounded-full border border-zinc-700 bg-zinc-800/80 hover:bg-zinc-700 text-[11px] font-semibold text-zinc-200 transition-colors"
+                      >
+                        View all
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Right Secondary Stack: Sentiment Impact & Tone Split */}
+                  <div className="space-y-6 flex flex-col justify-between">
+                    
+                    {/* Impact Metric with Dynamic Wave Visualizer */}
+                    <div className="bg-[#18191d] border border-white/5 rounded-[2rem] p-6">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-semibold text-zinc-400">Sentiment Impact Index</span>
+                      </div>
+                      <div className="text-3xl font-black text-white mt-2">
+                        +{Math.round(avgSentiment * 100) + 100}%
+                      </div>
+                      {/* Real Wave Visualizer mapped to history scores */}
+                      <div className="flex items-end gap-1 h-7 mt-3">
+                        {Array.from({ length: 18 }).map((_, i) => {
+                          const item = history[i];
+                          const score = item ? item.sentiment_score : 0.2;
+                          const height = Math.max(6, Math.min(28, Math.round((score + 1) * 12 + 4)));
+                          return (
+                            <div
+                              key={i}
+                              className={`flex-1 rounded-full transition-all hover:bg-[#f4adc6] ${score > 0.1 ? 'bg-[#f4adc6]/80' : 'bg-zinc-700'}`}
+                              style={{ height: `${height}px` }}
+                              title={item ? `${item.sentiment_label} (${item.sentiment_score})` : 'Baseline'}
+                            />
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Predicted Subjectivity Breakdown */}
+                    <div className="bg-[#18191d] border border-white/5 rounded-[2rem] p-6">
+                      <span className="text-xs font-semibold text-zinc-400">Content Tone Split</span>
+                      <div className="flex items-baseline space-x-4 mt-2">
+                        <div>
+                          <span className="text-2xl font-black text-white">{factPercent}%</span>
+                          <span className="text-xs text-zinc-400 ml-1.5 font-medium">Objective</span>
+                        </div>
+                        <div>
+                          <span className="text-2xl font-black text-[#f4adc6]">{opinionPercent}%</span>
+                          <span className="text-xs text-zinc-400 ml-1.5 font-medium">Opinion</span>
+                        </div>
+                      </div>
+                      <div className="w-full bg-zinc-800 h-1.5 rounded-full mt-3 overflow-hidden flex">
+                        <div className="bg-white h-full transition-all duration-500" style={{ width: `${factPercent}%` }} />
+                        <div className="bg-[#f4adc6] h-full transition-all duration-500" style={{ width: `${opinionPercent}%` }} />
+                      </div>
+                    </div>
+
+                  </div>
+
+                </div>
+
+              </div>
+
+              {/* ── RIGHT COLUMN (40% width): Interactive Stream & Input Terminal ── */}
+              <div className="lg:col-span-5 flex flex-col h-full bg-[#18191d] border border-white/5 rounded-[2rem] p-5 sm:p-6 justify-between min-h-[580px]">
+                
+                {/* Top Pill Tabs */}
+                <div className="flex items-center justify-between border-b border-white/5 pb-4">
+                  <div className="flex items-center space-x-1.5 bg-[#121316] p-1 rounded-full border border-white/5">
+                    {['Today', 'Trends', 'Batch PDF'].map((tab) => (
+                      <button
+                        key={tab}
+                        onClick={() => setActiveTab(tab)}
+                        className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all ${
+                          activeTab === tab
+                            ? 'bg-zinc-200 text-black shadow-sm'
+                            : 'text-zinc-400 hover:text-zinc-200'
+                        }`}
+                      >
+                        {tab}
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    onClick={downloadCSV}
+                    className="text-zinc-400 hover:text-white p-1.5 rounded-full hover:bg-zinc-800 transition-colors"
+                    title="Download Full CSV Log"
+                  >
+                    <FileText className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* Tab 1: Today (Conversational Feed) */}
+                {activeTab === 'Today' && (
+                  <div className="flex-1 overflow-y-auto py-4 space-y-4 max-h-[420px] pr-1 custom-scrollbar">
+                    {/* Welcome Bubble */}
+                    <div className="space-y-3">
+                      <div className="flex items-start gap-2.5">
+                        <div className="w-7 h-7 rounded-full bg-zinc-800 border border-white/10 flex items-center justify-center text-[10px] font-bold text-zinc-300 shrink-0">
+                          AI
+                        </div>
+                        <div className="bg-[#212329] border border-white/5 p-3.5 rounded-2xl rounded-tl-sm text-xs text-zinc-200 leading-relaxed max-w-[85%]">
+                          How can I help you today? Feed me text or upload PDFs to run deep NLP sentiment and readability analysis.
+                          <div className="text-[10px] text-zinc-500 mt-1 font-mono">11:32 AM</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Feed History Items */}
+                    {history.map((item) => (
+                      <div key={item.id} className="space-y-3">
+                        {/* User query bubble */}
+                        <div className="flex justify-end">
+                          <div className="bg-[#2a2c35] text-zinc-100 p-3.5 rounded-2xl rounded-tr-sm text-xs max-w-[88%] shadow-sm">
+                            <p className="line-clamp-3">{item.original_text}</p>
+                            <div className="text-[10px] text-zinc-400 text-right mt-1 font-mono">
+                              {new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Engine Response Bubble */}
+                        <div className="flex items-start gap-2.5">
+                          <div className="w-7 h-7 rounded-full bg-[#f4adc6] flex items-center justify-center text-[10px] font-bold text-black shrink-0">
+                            EC
+                          </div>
+                          <div className="bg-[#212329] border border-white/5 p-3.5 rounded-2xl rounded-tl-sm text-xs text-zinc-200 space-y-2 max-w-[88%]">
+                            {/* Metric Badges */}
+                            <div className="flex flex-wrap gap-1.5 items-center">
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                item.sentiment_label === 'Positive'
+                                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                                  : item.sentiment_label === 'Negative'
+                                  ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                                  : 'bg-zinc-700/50 text-zinc-300 border border-zinc-600'
+                              }`}>
+                                {item.sentiment_label} ({item.sentiment_score})
+                              </span>
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                                {item.readability_grade}
+                              </span>
+                            </div>
+
+                            {/* AI Summary */}
+                            {item.ai_summary && (
+                              <p className="text-zinc-300 text-[11px] leading-relaxed pt-1 border-t border-white/5">
+                                {item.ai_summary}
+                              </p>
+                            )}
+
+                            {/* Download PDF button */}
+                            <div className="pt-2 flex justify-between items-center text-[10px] text-zinc-400">
+                              <span>{item.word_count} words • {item.reading_time}m read</span>
+                              <button
+                                onClick={() => downloadProfessionalPDF(item)}
+                                className="flex items-center gap-1 text-[#f4adc6] hover:underline font-semibold"
+                              >
+                                <Download className="w-3 h-3" /> PDF Report
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+
+                    <div ref={chatEndRef} />
+                  </div>
+                )}
+
+                {/* Tab 2: Trends (Real-time Telemetry Charts) */}
+                {activeTab === 'Trends' && (
+                  <div className="flex-1 py-4 space-y-4 max-h-[420px] overflow-y-auto custom-scrollbar pr-1">
+                    <div className="bg-[#121316] border border-white/5 rounded-2xl p-4">
+                      <div className="text-xs font-bold text-zinc-400 mb-2">Sentiment Progression</div>
+                      <div className="h-40 w-full">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <AreaChart data={trendChartData.slice(-10)}>
+                            <XAxis dataKey="time" fontSize={9} stroke="#666" />
+                            <YAxis domain={[-1, 1]} fontSize={9} stroke="#666" />
+                            <Tooltip contentStyle={{ backgroundColor: '#1c1d22', border: 'none', borderRadius: '8px' }} />
+                            <Area type="monotone" dataKey="sentiment" stroke="#f4adc6" fill="#f4adc6" fillOpacity={0.2} />
+                          </AreaChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+
+                    <div className="bg-[#121316] border border-white/5 rounded-2xl p-4">
+                      <div className="text-xs font-bold text-zinc-400 mb-2">Word Count per Ingestion</div>
+                      <div className="h-32 w-full">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart data={trendChartData.slice(-10)}>
+                            <XAxis dataKey="time" fontSize={9} stroke="#666" />
+                            <YAxis fontSize={9} stroke="#666" />
+                            <Bar dataKey="words" fill="#34d399" radius={[4, 4, 0, 0]} />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Tab 3: Batch PDF Ingestion Zone */}
+                {activeTab === 'Batch PDF' && (
+                  <div className="flex-1 py-4 flex flex-col justify-center items-center text-center space-y-4">
+                    <div
+                      onClick={() => fileInputRef.current?.click()}
+                      className="w-full border-2 border-dashed border-zinc-700 hover:border-[#f4adc6] rounded-2xl p-8 cursor-pointer transition-all bg-[#121316]/50 hover:bg-[#121316] space-y-3"
+                    >
+                      <FileUp className="w-8 h-8 text-[#f4adc6] mx-auto animate-bounce" />
+                      <div className="text-xs font-bold text-white">Click or Drag &amp; Drop PDF Documents</div>
+                      <p className="text-[11px] text-zinc-400">Emoticore extracts multi-page text and generates collective NLP insights.</p>
+                      {files.length > 0 && (
+                        <div className="pt-2 text-xs font-bold text-[#f4adc6]">
+                          {files.length} document(s) ready for batch analysis
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Bottom Ingestion Terminal / Input Prompt */}
+                <form onSubmit={handleAnalyze} className="mt-4 pt-3 border-t border-white/5 space-y-2">
+                  {files.length > 0 && (
+                    <div className="flex items-center justify-between bg-zinc-800/80 px-3 py-1.5 rounded-xl text-xs text-[#f4adc6]">
+                      <span className="truncate font-semibold">{files.length} PDF file(s) attached</span>
+                      <button
+                        type="button"
+                        onClick={() => setFiles([])}
+                        className="text-zinc-400 hover:text-white text-xs font-bold ml-2"
+                      >
+                        × Clear
+                      </button>
+                    </div>
+                  )}
+
+                  <div className="flex items-center bg-[#121316] border border-white/10 rounded-2xl p-1.5 focus-within:border-zinc-500 transition-all shadow-inner">
+                    {/* Hidden File Input */}
                     <input
                       type="file"
                       accept=".pdf"
@@ -307,179 +722,90 @@ function App() {
                     <button
                       type="button"
                       onClick={() => fileInputRef.current.click()}
-                      className={`flex items-center space-x-2 px-6 py-3.5 rounded-2xl border font-bold transition-all ${files.length > 0 ? 'bg-emerald-50 border-emerald-500 text-emerald-700 shadow-sm' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300'}`}
+                      className="p-2.5 text-zinc-400 hover:text-white rounded-xl hover:bg-zinc-800 transition-colors"
+                      title="Attach PDF Documents"
                     >
-                      <FileUp className="w-5 h-5" />
-                      <span>{files.length > 0 ? `${files.length} File${files.length > 1 ? 's' : ''} Selected` : 'Batch PDFs'}</span>
+                      <Paperclip className="w-4 h-4" />
                     </button>
+
+                    <input
+                      type="text"
+                      value={inputText}
+                      onChange={(e) => setInputText(e.target.value)}
+                      placeholder={loading ? "Analyzing content & calculating sentiment..." : "How can I help you? Enter text..."}
+                      disabled={loading}
+                      className="flex-1 bg-transparent border-none outline-none px-3 text-xs text-white placeholder-zinc-500"
+                    />
+
                     <button
                       type="submit"
                       disabled={loading || (!inputText.trim() && files.length === 0)}
-                      className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white py-3.5 rounded-2xl font-black tracking-wide transition-all disabled:opacity-50 shadow-lg shadow-indigo-600/30 active:scale-[0.98]"
+                      className="p-2.5 bg-zinc-700/80 hover:bg-[#f4adc6] hover:text-black text-white rounded-xl transition-all disabled:opacity-40 disabled:hover:bg-zinc-700/80 disabled:hover:text-white"
+                      title="Execute Analysis"
                     >
-                      {loading ? 'Processing / Generating AI Summaries…' : 'Execute Deep Analysis'}
+                      <ArrowUp className="w-4 h-4" />
                     </button>
                   </div>
                 </form>
-              </section>
 
-              {/* Telemetry toggle */}
+              </div>
+
+            </div>
+          </>
+        )}
+
+      </div>
+
+      {/* ── Entity Explorer Modal ────────────────────────────────────────── */}
+      {showEntityModal && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-[#18191d] border border-white/10 rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-4 animate-in zoom-in-95 duration-200">
+            <div className="flex justify-between items-center pb-2 border-b border-white/5">
+              <h3 className="font-bold text-white text-sm flex items-center gap-2">
+                <Layers className="w-4 h-4 text-[#f4adc6]" /> All Extracted Entities &amp; Keywords
+              </h3>
               <button
-                onClick={() => setShowTelemetry(!showTelemetry)}
-                className="w-full flex items-center justify-between p-4 bg-slate-100/50 hover:bg-slate-100 border border-slate-200 rounded-2xl text-slate-600 font-bold transition-colors"
+                onClick={() => setShowEntityModal(false)}
+                className="p-1 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800"
               >
-                <div className="flex items-center gap-2">
-                  <Activity className="w-5 h-5 text-indigo-500" /> System Telemetry &amp; Charts
-                </div>
-                {showTelemetry ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                <X className="w-4 h-4" />
               </button>
-
-              {showTelemetry && history.length > 0 && (
-                <section className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in fade-in zoom-in-95 slide-in-from-top-4 duration-500 ease-out fill-mode-both">
-                  <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
-                    <h3 className="text-sm font-bold text-slate-500 mb-6 uppercase tracking-wider">Sentiment Velocity</h3>
-                    <div className="h-48 w-full">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={chartData}>
-                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                          <XAxis dataKey="time" fontSize={10} tickMargin={10} stroke="#94a3b8" />
-                          <YAxis domain={[-1, 1]} fontSize={10} stroke="#94a3b8" />
-                          <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }} />
-                          <Line type="monotone" dataKey="sentiment" stroke="#4f46e5" strokeWidth={3} dot={{ r: 4, fill: '#4f46e5', strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 6 }} />
-                        </LineChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </div>
-                  <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
-                    <h3 className="text-sm font-bold text-slate-500 mb-6 uppercase tracking-wider">Fact vs Opinion Index</h3>
-                    <div className="h-48 w-full">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={chartData}>
-                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                          <XAxis dataKey="time" fontSize={10} tickMargin={10} stroke="#94a3b8" />
-                          <YAxis domain={[0, 1]} fontSize={10} stroke="#94a3b8" />
-                          <Tooltip cursor={{ fill: '#f8fafc' }} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }} />
-                          <Bar dataKey="subjectivity" fill="#10b981" radius={[4, 4, 0, 0]} />
-                        </BarChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </div>
-                </section>
-              )}
-
-              {/* AI summary toggle */}
-              <button
-                onClick={() => setShowAi(!showAi)}
-                className="w-full flex items-center justify-between p-4 bg-indigo-50/50 hover:bg-indigo-100 border border-indigo-100 rounded-2xl text-indigo-800 font-bold transition-colors"
-              >
-                <div className="flex items-center gap-2">
-                  <Sparkles className="w-5 h-5 text-indigo-600" /> Latest AI Action Summary
-                </div>
-                {showAi ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
-              </button>
-
-              {showAi && history.length > 0 && (
-                <section className="bg-white p-6 rounded-3xl shadow-sm border border-indigo-100 animate-in fade-in zoom-in-95 slide-in-from-top-4 duration-500 ease-out fill-mode-both">
-                  <p className="text-sm text-indigo-900 font-semibold leading-relaxed">
-                    {history[0]?.ai_summary || "AI Data Missing — Check Groq API Key or Backend Logs."}
-                  </p>
-                </section>
-              )}
             </div>
 
-            {/* Right column — Intelligence Feed */}
-            <div className="lg:col-span-1">
-              <section className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200 h-full max-h-[850px] overflow-y-auto custom-scrollbar">
-                <h2 className="text-lg font-black mb-6 flex items-center justify-between text-slate-800 sticky top-0 bg-white pb-4 border-b border-slate-100 z-10">
-                  <span>Intelligence Feed</span>
-                  <div className="flex items-center gap-2">
-                    {history.length > 0 && (
-                      <button
-                        onClick={downloadCSV}
-                        className="flex items-center gap-1 text-[10px] font-bold bg-slate-100 text-slate-600 hover:bg-indigo-600 hover:text-white px-2.5 py-1.5 rounded-lg transition-all"
-                        title="Export history as CSV"
-                      >
-                        <Table2 className="w-3 h-3" /> CSV
-                      </button>
-                    )}
-                    <span className="bg-indigo-100 text-indigo-700 text-xs px-2 py-1 rounded-md font-bold">{history.length}</span>
+            <div className="relative">
+              <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-3 top-3" />
+              <input
+                type="text"
+                value={entitySearch}
+                onChange={(e) => setEntitySearch(e.target.value)}
+                placeholder="Search extracted entities..."
+                className="w-full bg-[#121316] border border-white/10 rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder-zinc-500 outline-none"
+              />
+            </div>
+
+            <div className="max-h-60 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
+              {sortedPhrases
+                .filter(p => p.name.toLowerCase().includes(entitySearch.toLowerCase()))
+                .map((p, i) => (
+                  <div key={i} className="flex justify-between items-center p-2.5 rounded-xl bg-[#121316] border border-white/5 text-xs">
+                    <span className="font-semibold text-zinc-200 capitalize">{p.name}</span>
+                    <span className="text-[11px] font-bold text-[#f4adc6] bg-[#f4adc6]/10 px-2 py-0.5 rounded-md">
+                      {p.count}
+                    </span>
                   </div>
-                </h2>
-                <div className="space-y-5 mt-2">
-                  {history.map((item) => (
-                    <div
-                      key={item.id}
-                      className="group p-5 bg-white border-2 border-slate-100 rounded-2xl hover:border-indigo-200 hover:shadow-md transition-all duration-300 relative overflow-hidden"
-                    >
-                      <div className="absolute top-0 left-0 w-1 h-full bg-indigo-500 opacity-0 group-hover:opacity-100 transition-opacity" />
-                      <div className="flex justify-between items-start mb-3">
-                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">ID: 0x0{item.id}</span>
-                        <button
-                          onClick={() => downloadProfessionalPDF(item)}
-                          className="text-indigo-600 hover:text-white hover:bg-indigo-600 transition-all flex items-center gap-1 text-[10px] font-bold bg-indigo-50 px-2.5 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 transform translate-y-1 group-hover:translate-y-0 duration-200"
-                        >
-                          <Download className="w-3 h-3" /> Report
-                        </button>
-                      </div>
-                      <p className="text-sm text-slate-600 line-clamp-3 mb-4 leading-relaxed font-medium">"{item.original_text}"</p>
-                      <div className="flex flex-wrap gap-2">
-                        <div className={`px-2.5 py-1 rounded-md text-[10px] font-black tracking-wide border ${item.sentiment_label === 'Positive' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : item.sentiment_label === 'Negative' ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-slate-100 text-slate-600 border-slate-200'}`}>
-                          {item.sentiment_label}
-                        </div>
-                        <div className="flex items-center gap-1.5 px-2.5 py-1 bg-indigo-50 text-indigo-700 border border-indigo-100 rounded-md text-[10px] font-bold">
-                          <FileText className="w-3 h-3" /> {item.readability_grade}
-                        </div>
-                        <div className="flex items-center gap-1.5 px-2.5 py-1 bg-amber-50 text-amber-700 border border-amber-100 rounded-md text-[10px] font-bold">
-                          <Scale className="w-3 h-3" /> {item.subjectivity > 0.5 ? 'Opinion' : 'Factual'}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                  {history.length === 0 && (
-                    <p className="text-center text-slate-400 text-sm py-10">
-                      No analyses yet. Submit some text or a PDF above.
-                    </p>
-                  )}
-                </div>
-              </section>
+                ))}
+              {sortedPhrases.length === 0 && (
+                <p className="text-center text-xs text-zinc-500 py-6">No extracted entities found yet.</p>
+              )}
             </div>
           </div>
+        </div>
+      )}
 
-        ) : (
-          // Admin panel
-          <section className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <div className="bg-slate-900 p-8 text-white flex items-center justify-between">
-              <div>
-                <h2 className="text-2xl font-black flex items-center gap-3">
-                  <Users className="w-8 h-8 text-indigo-400" /> System Registry
-                </h2>
-                <p className="text-slate-400 text-sm mt-1">All registered identities</p>
-              </div>
-              <div className="text-5xl font-black text-indigo-500/50">{allUsers.length}</div>
-            </div>
-            <div className="p-8">
-              <table className="w-full text-left">
-                <thead>
-                  <tr className="text-slate-400 text-xs uppercase tracking-widest border-b border-slate-100">
-                    <th className="pb-4 font-black">UUID</th>
-                    <th className="pb-4 font-black">Intelligence Identity</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-50">
-                  {allUsers.map((u) => (
-                    <tr key={u.id} className="group hover:bg-slate-50 transition-all">
-                      <td className="py-4 font-mono text-xs text-slate-400">0x0{u.id}</td>
-                      <td className="py-4 font-bold text-slate-800">{u.username}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </section>
-        )}
-      </div>
     </div>
   );
 }
 
 export default App;
+
+

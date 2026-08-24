@@ -111,31 +111,18 @@ class TestLogin:
 # ---------------------------------------------------------------------------
 
 class TestAnalyze:
-    def test_analyze_requires_auth(self):
-        res = client.post("/analyze", data={"original_text": "Hello world"})
-        assert res.status_code == 401
-
-    def test_analyze_with_valid_token(self, auth):
+    def test_analyze_public_access(self):
         res = client.post(
             "/analyze",
-            data={"original_text": "This is a wonderful sentence for testing NLP analysis pipelines."},
-            headers=auth,
+            data={"original_text": "This is a wonderful sentence for testing public NLP analysis pipelines."},
         )
         assert res.status_code == 200
         assert res.json()["status"] == "Complete"
         assert res.json()["count"] == 1
 
-    def test_analyze_empty_input_rejected(self, auth):
-        res = client.post("/analyze", data={}, headers=auth)
+    def test_analyze_empty_input_rejected(self):
+        res = client.post("/analyze", data={})
         assert res.status_code == 400
-
-    def test_analyze_invalid_token(self):
-        res = client.post(
-            "/analyze",
-            data={"original_text": "Test"},
-            headers={"Authorization": "Bearer totally-invalid-token"},
-        )
-        assert res.status_code == 401
 
 
 # ---------------------------------------------------------------------------
@@ -143,26 +130,18 @@ class TestAnalyze:
 # ---------------------------------------------------------------------------
 
 class TestHistory:
-    def test_history_requires_auth(self, user_id):
-        res = client.get(f"/history/{user_id}")
-        assert res.status_code == 401
-
-    def test_history_returns_list(self, auth, user_id):
-        res = client.get(f"/history/{user_id}", headers=auth)
+    def test_history_public_access(self):
+        res = client.get("/history")
         assert res.status_code == 200
         assert isinstance(res.json(), list)
 
-    def test_history_wrong_user_forbidden(self, auth):
-        res = client.get("/history/99999", headers=auth)
-        assert res.status_code == 403
-
-    def test_history_pagination(self, auth, user_id):
-        res = client.get(f"/history/{user_id}?limit=1&skip=0", headers=auth)
+    def test_history_pagination(self):
+        res = client.get("/history?limit=1&skip=0")
         assert res.status_code == 200
         assert len(res.json()) <= 1
 
-    def test_export_csv(self, auth, user_id):
-        res = client.get(f"/history/{user_id}/export", headers=auth)
+    def test_export_csv(self):
+        res = client.get("/history/export")
         assert res.status_code == 200
         assert "text/csv" in res.headers["content-type"]
 

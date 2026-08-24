@@ -134,7 +134,7 @@ def login(user: schemas.UserCreate, db: Session = Depends(get_db)):
 
 
 # ---------------------------------------------------------------------------
-# Routes — Authenticated
+# Routes — Analysis & History (Public)
 # ---------------------------------------------------------------------------
 
 @app.post("/analyze", tags=["Analysis"])
@@ -142,11 +142,10 @@ async def analyze(
     original_text: Optional[str] = Form(None),
     files: List[UploadFile] = File(None),
     db: Session = Depends(get_db),
-    current_user_id: int = Depends(get_current_user_id),
 ):
     """
     Run NLP + AI analysis on submitted text or PDF(s).
-    Requires a valid JWT Bearer token.
+    Open access — no login required.
     """
     results_count = 0
 
@@ -161,7 +160,7 @@ async def analyze(
             record = models.InsightRecord(
                 **analysis,
                 original_text=f"PDF: {file.filename}",
-                owner_id=current_user_id,
+                owner_id=None,
             )
             db.add(record)
             results_count += 1
@@ -170,7 +169,7 @@ async def analyze(
         record = models.InsightRecord(
             **analysis,
             original_text=original_text[:500],
-            owner_id=current_user_id,
+            owner_id=None,
         )
         db.add(record)
         results_count += 1
@@ -179,8 +178,53 @@ async def analyze(
         raise HTTPException(status_code=400, detail="No valid input provided.")
 
     db.commit()
-    logger.info("Analysis complete for user_id=%s | records=%s", current_user_id, results_count)
+    logger.info("Analysis complete | records=%s", results_count)
     return {"status": "Complete", "count": results_count}
+
+
+@app.get("/history", response_model=List[schemas.InsightResponse], tags=["History"])
+def get_all_history(
+    skip: int = 0,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+):
+    """Retrieve recent paginated analysis history."""
+    return (
+        db.query(models.InsightRecord)
+        .order_by(models.InsightRecord.created_at.desc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+
+
+@app.get("/history/export", tags=["History"])
+def export_history_csv(
+    db: Session = Depends(get_db),
+):
+    """Download analysis history as a CSV file."""
+    records = db.query(models.InsightRecord).order_by(models.InsightRecord.created_at.desc()).all()
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow([
+        "ID", "Text (Preview)", "Sentiment Score", "Sentiment Label",
+        "Subjectivity", "Readability Grade", "Word Count", "Reading Time (min)",
+        "Key Phrases", "AI Summary", "Created At",
+    ])
+    for r in records:
+        writer.writerow([
+            r.id, r.original_text, r.sentiment_score, r.sentiment_label,
+            r.subjectivity, r.readability_grade, r.word_count, r.reading_time,
+            r.key_phrases, r.ai_summary, r.created_at,
+        ])
+
+    output.seek(0)
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=emoticore_history.csv"},
+    )
 
 
 @app.get("/history/{user_id}", response_model=List[schemas.InsightResponse], tags=["History"])
@@ -189,34 +233,28 @@ def get_history(
     skip: int = 0,
     limit: int = 50,
     db: Session = Depends(get_db),
-    current_user_id: int = Depends(get_current_user_id),
 ):
-    """Retrieve paginated analysis history for the authenticated user."""
-    if current_user_id != user_id:
-        raise HTTPException(status_code=403, detail="Access denied.")
-    return (
+    """Retrieve analysis history for a specific user ID or all recent."""
+    records = (
         db.query(models.InsightRecord)
-        .filter(models.InsightRecord.owner_id == user_id)
+        .filter((models.InsightRecord.owner_id == user_id) | (models.InsightRecord.owner_id == None))
         .order_by(models.InsightRecord.created_at.desc())
         .offset(skip)
         .limit(limit)
         .all()
     )
+    return records
 
 
 @app.get("/history/{user_id}/export", tags=["History"])
-def export_history_csv(
+def export_user_history_csv(
     user_id: int,
     db: Session = Depends(get_db),
-    current_user_id: int = Depends(get_current_user_id),
 ):
-    """Download the authenticated user's full analysis history as a CSV file."""
-    if current_user_id != user_id:
-        raise HTTPException(status_code=403, detail="Access denied.")
-
+    """Download user analysis history as a CSV file."""
     records = (
         db.query(models.InsightRecord)
-        .filter(models.InsightRecord.owner_id == user_id)
+        .filter((models.InsightRecord.owner_id == user_id) | (models.InsightRecord.owner_id == None))
         .order_by(models.InsightRecord.created_at.desc())
         .all()
     )
