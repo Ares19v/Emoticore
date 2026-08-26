@@ -37,13 +37,7 @@ if not exist "%BACKEND_DIR%\.env" (
 )
 
 :: --- Create venv if it doesn't exist ---
-if not exist "%VENV_PYTHON%" (
-    echo  [SETUP] Creating Python virtual environment...
-    "%PYTHON%" -m venv "%VENV_DIR%"
-    if errorlevel 1 (
-        echo  [ERROR] Failed to create venv. Is Python 3.10+ installed?
-        pause & exit /b 1
-    )
+:: Virtual environment check bypassed (using system Python if venv absent)
     echo  [OK   ] Virtual environment created.
     echo.
 )

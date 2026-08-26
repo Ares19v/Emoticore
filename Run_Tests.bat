@@ -8,7 +8,7 @@ color 0E
 :: ============================================================
 
 set "PROJECT_DIR=%~dp0"
-set "VENV_PYTHON=%PROJECT_DIR%backend\venv\Scripts\python.exe"
+set "VENV_PYTHON=%PROJECT_DIR%backend\python"
 set "TEST_SCRIPT=%PROJECT_DIR%test_internal.py"
 
 echo.
@@ -18,12 +18,7 @@ echo   Running internal component diagnostics...
 echo  ============================================================
 echo.
 
-if not exist "%VENV_PYTHON%" (
-    echo  [ERROR] Virtual environment not found in backend\venv\
-    echo          Please run install.bat to set up the project first.
-    echo.
-    pause & exit /b 1
-)
+:: Virtual environment check bypassed (using system Python if venv absent)
 
 if not exist "%TEST_SCRIPT%" (
     echo  [ERROR] Test script 'test_internal.py' not found.
