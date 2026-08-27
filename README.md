@@ -410,7 +410,7 @@ Emoticore/
 - [x] **Docker Support** — Containerized with Dockerfile + docker-compose
 - [x] **CI/CD Pipeline** — GitHub Actions runs tests + build on every push
 - [ ] **Batch Processing Queue** — Background job queue for large multi-PDF uploads
-- [ ] **PostgreSQL Migration** — Swap SQLite for a production-grade PostgreSQL database
+- [ ] **PostgreSQL Migration** — Swap SQLite for a high-performance PostgreSQL database
 - [ ] **Tone Classification** — Multi-label emotional tone tagging (e.g., Anger, Joy, Urgency)
 - [ ] **Dark Mode Toggle** — User-preference-aware theme switching
 
