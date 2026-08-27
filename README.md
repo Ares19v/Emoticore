@@ -2,6 +2,9 @@
 
 # Emoticore — Intelligence Engine
 
+
+[![CI](https://github.com/Ares19v/Emoticore/actions/workflows/ci.yml/badge.svg)](https://github.com/Ares19v/Emoticore/actions/workflows/ci.yml)
+
 ### *Transform text and documents into actionable insights, powered by NLP and Groq AI*
 
 [![Live Demo](https://img.shields.io/badge/🌐_Live_Demo-Frontend-7C3AED?style=for-the-badge)](https://Emoticore-gilt-iota.vercel.app)
