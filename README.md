@@ -24,8 +24,37 @@
 </div>
 
 
+## 🖥️ UI & Analytics Showcase
+
+<p align="center">
+  <img src="assets/Emoticore_1.png" alt="Emoticore Interactive NLP Chat & Sentiment Analysis" width="100%" style="border-radius: 8px; border: 1px solid #30363d;" />
+  <br>
+  <em>Interactive NLP Analysis: Real-time sentiment scoring, subjectivity assessment, topic extraction, and automated action suggestions.</em>
+</p>
+
+<p align="center">
+  <img src="assets/Emoticore_2.png" alt="Emoticore Linguistic Analytics & Sentiment Trajectory" width="100%" style="border-radius: 8px; border: 1px solid #30363d;" />
+  <br>
+  <em>Linguistic Analytics & Sentiment Trajectory: Historical sentiment score timelines and subjectivity vs. objectivity distribution charts.</em>
+</p>
+
+<p align="center">
+  <img src="assets/Emoticore_Intelligence_Engine.png" alt="Emoticore General Statistics & Cockpit" width="100%" style="border-radius: 8px; border: 1px solid #30363d;" />
+  <br>
+  <em>General Statistics Cockpit: System telemetry overview, prompt templates, and sentiment impact velocity.</em>
+</p>
+
+<p align="center">
+  <img src="assets/Emoticore_Linguistic_Analytics.png" alt="Emoticore Analytics Workspace View" width="100%" style="border-radius: 8px; border: 1px solid #30363d;" />
+  <br>
+  <em>Trajectory Analytics Workspace: Dedicated multi-variable telemetry and trend visualization console.</em>
+</p>
+
+---
+
 ## 📌 Table of Contents
 
+- [🖥️ UI & Analytics Showcase](#️-ui--analytics-showcase)
 - [✨ Features](#-features)
 - [🏗️ Architecture](#️-architecture)
 - [🧠 How It Works](#-how-it-works)
